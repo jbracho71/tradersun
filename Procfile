@@ -1,1 +1,1 @@
-worker: python TRADERSUN.py
+worker: TRADERSUN.py
