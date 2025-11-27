@@ -1,0 +1,7 @@
+python-telegram-bot
+yfinance
+ta
+numpy
+pandas
+matplotlib
+scikit-learn
