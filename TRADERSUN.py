@@ -98,7 +98,7 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         adx = float(ta.trend.ADXIndicator(high, low, close).adx().iloc[-1])
 
         atr = float(ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1])
-        atr_index = (atr / df["High"].max()) * 100
+        atr_index = (atr / float(df["High"].max())) * 100
 
         if adx < 15:
             return (
