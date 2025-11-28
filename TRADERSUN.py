@@ -91,13 +91,13 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         high = df["High"].squeeze()
         low = df["Low"].squeeze()
 
-        rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
-        cci = ta.trend.CCIIndicator(high, low, close).cci().iloc[-1]
-        stoch = ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1]
-        adx = ta.trend.ADXIndicator(high, low, close).adx().iloc[-1]
+        # Convertir explícitamente a float para evitar errores de Series
+        rsi = float(ta.momentum.RSIIndicator(close).rsi().iloc[-1])
+        cci = float(ta.trend.CCIIndicator(high, low, close).cci().iloc[-1])
+        stoch = float(ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1])
+        adx = float(ta.trend.ADXIndicator(high, low, close).adx().iloc[-1])
 
-        # 🔎 Calcular ATR y normalizar a 0–100
-        atr = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1]
+        atr = float(ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1])
         atr_index = (atr / df["High"].max()) * 100
 
         if adx < 15:
@@ -111,9 +111,7 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         pred = modelo.predict(X_new)[0]
         confianza = float(modelo.predict_proba(X_new)[0][pred] * 100)
 
-        return generar_mensaje_estilo_trader(
-            par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index
-        )
+        return generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index)
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
@@ -186,7 +184,6 @@ async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=f"⏱ Selecciona intervalo para {par}:", reply_markup=reply_markup)
-
 # ------------------------------
 # Selección de intervalo → señal
 # ------------------------------
