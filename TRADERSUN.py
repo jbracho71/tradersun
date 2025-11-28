@@ -229,7 +229,7 @@ async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     parts = query.data.split("|")
-    if len(parts) == 3:
+    if parts[0] == "ver_rendimiento" and len(parts) == 3:
         _, par, intervalo = parts
         _, _, df_hist = entrenar_modelo(par, intervalo)
     else:
@@ -257,9 +257,9 @@ def main():
     # Comando inicial /start
     app.add_handler(CommandHandler("start", menu_otc))
     app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern=r".*=X$"))
-    app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=r".*\|.*"))
+    app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=r"^[A-Z]+.*\|[0-9]+[mh]$"))
     app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern=r"nueva_senal"))
-    app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern=r"ver_rendimiento.*"))
+    app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern=r"^ver_rendimiento.*"))
 
     app.run_polling()
 
