@@ -26,15 +26,10 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
     high = df["High"].squeeze()
     low = df["Low"].squeeze()
 
-    # Indicadores técnicos
     df["RSI"] = ta.momentum.RSIIndicator(close).rsi()
     df["CCI"] = ta.trend.CCIIndicator(high, low, close).cci()
     df["STOCH"] = ta.momentum.StochasticOscillator(high, low, close).stoch()
     df["ADX"] = ta.trend.ADXIndicator(high, low, close).adx()
-
-    # 🔎 Calcular ATR y normalizar a índice 0–100
-    atr = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range()
-    df["ATR_Index"] = (atr / atr.max()) * 100
 
     df = df.dropna()
     df["target"] = np.where(df["Close"].values > df["Open"].values, 1, 0)
@@ -56,9 +51,13 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
 # ------------------------------
 # Mensaje estilo Trader Loco
 # ------------------------------
-def generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index):
+def generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza):
     tendencia = "alcista" if pred == 1 else "bajista"
-    tipo = "🟢 CALL (COMPRAR)" if pred == 1 else "🔴 PUT (VENDER)"
+
+    if pred == 1:
+        tipo = "🟢 CALL (COMPRAR)"
+    else:
+        tipo = "🔴 PUT (VENDER)"
 
     prob_entrada = round(precision, 2)
     prob_reversion = round(100 - precision, 2)
@@ -69,7 +68,6 @@ def generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, pr
         f"📊 Marco de tiempo: {intervalo}\n"
         f"{tipo}\n\n"
         f"📈 RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ADX={adx:.2f}\n"
-        f"📊 Volatilidad (ATR): {atr_index:.2f}/100\n"
         f"✅ Probabilidad de entrada exitosa: {prob_entrada}%\n"
         f"🔄 Probabilidad de reversión: {prob_reversion}%\n"
         f"📊 Nivel de confianza (0–100): {confianza:.2f}\n\n"
@@ -96,24 +94,18 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         stoch = ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1]
         adx = ta.trend.ADXIndicator(high, low, close).adx().iloc[-1]
 
-        # 🔎 Calcular ATR y normalizar a 0–100
-        atr = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1]
-        atr_index = (atr / df["High"].max()) * 100
-
         if adx < 15:
             return (
                 f"⚠️ Mercado plano detectado para {par} ({intervalo}).\n"
                 f"ADX={adx:.2f} < 15 → evitar operar.\n"
-                f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ATR={atr_index:.2f}/100"
+                f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}"
             )
 
         X_new = pd.DataFrame([[rsi, cci, stoch, adx]], columns=["RSI", "CCI", "STOCH", "ADX"])
         pred = modelo.predict(X_new)[0]
         confianza = float(modelo.predict_proba(X_new)[0][pred] * 100)
 
-        return generar_mensaje_estilo_trader(
-            par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index
-        )
+        return generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza)
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
