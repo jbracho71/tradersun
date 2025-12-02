@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = "TU_TOKEN_AQUI"  # Reemplaza con tu token real de BotFather
+TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk"  # Reemplaza con tu token real de BotFather
 
 # ------------------------------
 # Entrenamiento del modelo
