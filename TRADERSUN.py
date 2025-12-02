@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk"  # Reemplaza con tu token real de BotFather
+TOKEN = "TU_TOKEN_AQUI"  # Reemplaza con tu token real de BotFather
 
 # ------------------------------
 # Entrenamiento del modelo
@@ -52,32 +52,8 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
     precision = accuracy_score(y_test, y_pred) * 100
 
     return modelo, precision, df
-
 # ------------------------------
-# Mensaje estilo Trader Loco
-# ------------------------------
-def generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index):
-    tendencia = "alcista" if pred == 1 else "bajista"
-    tipo = "🟢 CALL (COMPRAR)" if pred == 1 else "🔴 PUT (VENDER)"
-
-    prob_entrada = round(precision, 2)
-    prob_reversion = round(100 - precision, 2)
-
-    mensaje = (
-        f"🧠 Analizando indicadores para {par} OTC\n"
-        f"📉 Tendencia detectada: {tendencia}\n\n"
-        f"📊 Marco de tiempo: {intervalo}\n"
-        f"{tipo}\n\n"
-        f"📈 RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ADX={adx:.2f}\n"
-        f"📊 Volatilidad (ATR): {atr_index:.2f}/100\n"
-        f"✅ Probabilidad de entrada exitosa: {prob_entrada}%\n"
-        f"🔄 Probabilidad de reversión: {prob_reversion}%\n"
-        f"📊 Nivel de confianza (0–100): {confianza:.2f}\n\n"
-        f"⚠️ No operar fuera de esta señal"
-    )
-    return mensaje
-# ------------------------------
-# Generación de señal
+# Generación de señal con sentimiento de trader experto
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
@@ -91,15 +67,15 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         high = df["High"].squeeze()
         low = df["Low"].squeeze()
 
-        # Convertir explícitamente a float para evitar errores de Series
+        # Indicadores convertidos a float
         rsi = float(ta.momentum.RSIIndicator(close).rsi().iloc[-1])
         cci = float(ta.trend.CCIIndicator(high, low, close).cci().iloc[-1])
         stoch = float(ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1])
         adx = float(ta.trend.ADXIndicator(high, low, close).adx().iloc[-1])
-
         atr = float(ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1])
         atr_index = (atr / float(df["High"].max())) * 100
 
+        # Filtro de mercado plano
         if adx < 15:
             return (
                 f"⚠️ Mercado plano detectado para {par} ({intervalo}).\n"
@@ -107,11 +83,34 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
                 f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ATR={atr_index:.2f}/100"
             )
 
+        # Señal del modelo
         X_new = pd.DataFrame([[rsi, cci, stoch, adx]], columns=["RSI", "CCI", "STOCH", "ADX"])
-        pred = modelo.predict(X_new)[0]
+        pred = modelo.predict(X_new)[0]  # 1 = CALL, 0 = PUT
         confianza = float(modelo.predict_proba(X_new)[0][pred] * 100)
 
-        return generar_mensaje_estilo_trader(par, intervalo, rsi, cci, stoch, adx, pred, precision, confianza, atr_index)
+        # ------------------------------
+        # Sentimiento de trader experto
+        # ------------------------------
+        if rsi < 30 and adx > 20 and atr_index > 1.0:
+            sentimiento_trader = "CALL"
+        elif rsi > 70 and adx > 20 and atr_index > 1.0:
+            sentimiento_trader = "PUT"
+        else:
+            sentimiento_trader = "NEUTRO"
+
+        # Comparación modelo vs trader experto
+        if (pred == 1 and sentimiento_trader == "CALL") or (pred == 0 and sentimiento_trader == "PUT"):
+            fuerza = "✅ Señal fuerte (modelo + trader experto alineados)"
+        else:
+            fuerza = "⚠️ Señal débil (modelo y trader experto no coinciden)"
+
+        # Mensaje final
+        return (
+            f"📈 Señal: {'CALL' if pred==1 else 'PUT'} ({confianza:.2f}% confianza)\n"
+            f"📊 Sentimiento de trader experto: {sentimiento_trader}\n"
+            f"{fuerza}\n"
+            f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ADX={adx:.2f}, ATR={atr_index:.2f}/100"
+        )
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
@@ -142,7 +141,6 @@ def generar_grafico_rendimiento(df: pd.DataFrame, par: str, intervalo: str) -> B
     plt.close()
     buf.seek(0)
     return buf
-
 # ------------------------------
 # Menú de pares con banderas
 # ------------------------------
@@ -202,7 +200,7 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     modelo, precision, df_hist = entrenar_modelo(par, intervalo)
     senal = generar_senal(par, intervalo, modelo, precision)
 
-    # Teclado solo con nueva señal y rendimiento histórico
+    # Teclado con nueva señal y rendimiento histórico
     keyboard = [
         [InlineKeyboardButton("📡 Nueva señal", callback_data="nueva_senal")],
         [InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data=f"ver_rendimiento|{par}|{intervalo}")]
@@ -249,19 +247,26 @@ async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 # ------------------------------
-# Configuración del bot
+# Configuración del bot (main)
 # ------------------------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     # Comando inicial /start
     app.add_handler(CommandHandler("start", menu_otc))
+    # Selección de par (ej: EURUSD=X)
     app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern=r".*=X$"))
+    # Selección de intervalo (ej: EURUSD=X|15m)
     app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=r"^[A-Z]+.*\|[0-9]+[mh]$"))
+    # Volver a menú
     app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern=r"nueva_senal"))
+    # Ver rendimiento histórico (ej: ver_rendimiento|EURUSD=X|15m)
     app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern=r"^ver_rendimiento.*"))
 
     app.run_polling()
 
 if __name__ == "__main__":
     main()
+
+
+
