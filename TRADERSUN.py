@@ -53,69 +53,25 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
 
     return modelo, precision, df
 # ------------------------------
-# Generación de señal con análisis gráfico automático
+# Generación de señal con análisis gráfico automático + semáforo
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
-    try:
-        df = yf.download(par, period="5d", interval=intervalo, auto_adjust=True)
-        if df.empty or modelo is None:
-            return f"⚠️ No se pudieron obtener datos para {par} en {intervalo}"
+    ...
+    # Score de fuerza
+    score = ...
+    # Semáforo visual
+    if score >= 70:
+        semaforo = "🟢 Entrar (alta confianza)"
+    elif 40 <= score < 70:
+        semaforo = "🟡 Esperar/confirmar (riesgo moderado)"
+    else:
+        semaforo = "🔴 Evitar (señal débil)"
 
-        df.index = df.index.tz_convert("America/Caracas")
-
-        close = df["Close"].squeeze()
-        high = df["High"].squeeze()
-        low = df["Low"].squeeze()
-
-        # Indicadores
-        rsi = float(ta.momentum.RSIIndicator(close).rsi().iloc[-1])
-        cci = float(ta.trend.CCIIndicator(high, low, close).cci().iloc[-1])
-        stoch = float(ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1])
-        adx = float(ta.trend.ADXIndicator(high, low, close).adx().iloc[-1])
-        atr = float(ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1])
-        atr_index = (atr / float(df["High"].max())) * 100
-
-        # Señal del modelo
-        X_new = pd.DataFrame([[rsi, cci, stoch, adx]], columns=["RSI", "CCI", "STOCH", "ADX"])
-        pred = modelo.predict(X_new)[0]  # 1 = CALL, 0 = PUT
-        confianza = float(modelo.predict_proba(X_new)[0][pred] * 100)
-
-        # Análisis gráfico
-        ultima_vela = df.iloc[-1]
-        vela = "alcista" if ultima_vela["Close"] > ultima_vela["Open"] else "bajista"
-
-        ema20 = df["Close"].ewm(span=20).mean().iloc[-1]
-        ema50 = df["Close"].ewm(span=50).mean().iloc[-1]
-        tendencia = "alcista" if ema20 > ema50 else "bajista"
-
-        soporte = df["Low"].rolling(20).min().iloc[-1]
-        resistencia = df["High"].rolling(20).max().iloc[-1]
-        cerca_resistencia = ultima_vela["Close"] >= resistencia * 0.98
-        cerca_soporte = ultima_vela["Close"] <= soporte * 1.02
-
-        # Score de fuerza
-        score = 0
-        if (pred == 1 and vela == "alcista") or (pred == 0 and vela == "bajista"):
-            score += 30
-        if (pred == 1 and tendencia == "alcista") or (pred == 0 and tendencia == "bajista"):
-            score += 30
-        if not cerca_resistencia and not cerca_soporte:
-            score += 20
-        if adx > 20:
-            score += 20
-
-        return (
-            f"📈 Señal: {'CALL' if pred==1 else 'PUT'} ({confianza:.2f}% confianza)\n"
-            f"📊 Análisis gráfico:\n"
-            f"   • Última vela: {vela}\n"
-            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
-            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
-            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
-            f"🔥 Fuerza de señal: {score}/100"
-        )
-
-    except Exception as e:
-        return f"❌ Error analizando {par}: {e}"
+    return (
+        f"...\n"
+        f"🔥 Fuerza de señal: {score}/100\n"
+        f"{semaforo}"
+    )
 # ------------------------------
 # Rendimiento histórico (gráfico)
 # ------------------------------
