@@ -53,7 +53,7 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
 
     return modelo, precision, df
 # ------------------------------
-# Generación de señal con sentimiento de trader experto
+# Generación de señal con análisis gráfico automático
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
@@ -67,7 +67,7 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         high = df["High"].squeeze()
         low = df["Low"].squeeze()
 
-        # Indicadores convertidos a float
+        # Indicadores
         rsi = float(ta.momentum.RSIIndicator(close).rsi().iloc[-1])
         cci = float(ta.trend.CCIIndicator(high, low, close).cci().iloc[-1])
         stoch = float(ta.momentum.StochasticOscillator(high, low, close).stoch().iloc[-1])
@@ -75,46 +75,47 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         atr = float(ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range().iloc[-1])
         atr_index = (atr / float(df["High"].max())) * 100
 
-        # Filtro de mercado plano
-        if adx < 15:
-            return (
-                f"⚠️ Mercado plano detectado para {par} ({intervalo}).\n"
-                f"ADX={adx:.2f} < 15 → evitar operar.\n"
-                f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ATR={atr_index:.2f}/100"
-            )
-
         # Señal del modelo
         X_new = pd.DataFrame([[rsi, cci, stoch, adx]], columns=["RSI", "CCI", "STOCH", "ADX"])
         pred = modelo.predict(X_new)[0]  # 1 = CALL, 0 = PUT
         confianza = float(modelo.predict_proba(X_new)[0][pred] * 100)
 
-        # ------------------------------
-        # Sentimiento de trader experto
-        # ------------------------------
-        if rsi < 30 and adx > 20 and atr_index > 1.0:
-            sentimiento_trader = "CALL"
-        elif rsi > 70 and adx > 20 and atr_index > 1.0:
-            sentimiento_trader = "PUT"
-        else:
-            sentimiento_trader = "NEUTRO"
+        # Análisis gráfico
+        ultima_vela = df.iloc[-1]
+        vela = "alcista" if ultima_vela["Close"] > ultima_vela["Open"] else "bajista"
 
-        # Comparación modelo vs trader experto
-        if (pred == 1 and sentimiento_trader == "CALL") or (pred == 0 and sentimiento_trader == "PUT"):
-            fuerza = "✅ Señal fuerte (modelo + trader experto alineados)"
-        else:
-            fuerza = "⚠️ Señal débil (modelo y trader experto no coinciden)"
+        ema20 = df["Close"].ewm(span=20).mean().iloc[-1]
+        ema50 = df["Close"].ewm(span=50).mean().iloc[-1]
+        tendencia = "alcista" if ema20 > ema50 else "bajista"
 
-        # Mensaje final
+        soporte = df["Low"].rolling(20).min().iloc[-1]
+        resistencia = df["High"].rolling(20).max().iloc[-1]
+        cerca_resistencia = ultima_vela["Close"] >= resistencia * 0.98
+        cerca_soporte = ultima_vela["Close"] <= soporte * 1.02
+
+        # Score de fuerza
+        score = 0
+        if (pred == 1 and vela == "alcista") or (pred == 0 and vela == "bajista"):
+            score += 30
+        if (pred == 1 and tendencia == "alcista") or (pred == 0 and tendencia == "bajista"):
+            score += 30
+        if not cerca_resistencia and not cerca_soporte:
+            score += 20
+        if adx > 20:
+            score += 20
+
         return (
             f"📈 Señal: {'CALL' if pred==1 else 'PUT'} ({confianza:.2f}% confianza)\n"
-            f"📊 Sentimiento de trader experto: {sentimiento_trader}\n"
-            f"{fuerza}\n"
-            f"RSI={rsi:.2f}, CCI={cci:.2f}, STOCH={stoch:.2f}, ADX={adx:.2f}, ATR={atr_index:.2f}/100"
+            f"📊 Análisis gráfico:\n"
+            f"   • Última vela: {vela}\n"
+            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
+            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
+            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
+            f"🔥 Fuerza de señal: {score}/100"
         )
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
-
 # ------------------------------
 # Rendimiento histórico (gráfico)
 # ------------------------------
