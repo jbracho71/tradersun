@@ -53,7 +53,7 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
 
     return modelo, precision, df
 # ------------------------------
-# Generación de señal con análisis gráfico automático + semáforo
+# Generación de señal con análisis gráfico automático + semáforo + checklist
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
@@ -106,13 +106,25 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         if adx > 20:
             score += 20
 
-        # Semáforo visual
+        # Semáforo visual con recomendación de entrada
         if score >= 70:
-            semaforo = "🟢 Entrar (alta confianza)"
+            if (pred == 1 and vela == "alcista") or (pred == 0 and vela == "bajista"):
+                semaforo = "🟢 Entrar de una vez (alta confianza)"
+            else:
+                semaforo = "🟢 Señal fuerte, pero esperar la próxima vela"
         elif 40 <= score < 70:
             semaforo = "🟡 Esperar/confirmar (riesgo moderado)"
         else:
             semaforo = "🔴 Evitar (señal débil)"
+
+        # Checklist rápido (✅/❌)
+        checklist = (
+            f"📋 Checklist disciplina:\n"
+            f"   • Tendencia confirma → {'✅' if (pred==1 and tendencia=='alcista') or (pred==0 and tendencia=='bajista') else '❌'}\n"
+            f"   • Última vela confirma → {'✅' if (pred==1 and vela=='alcista') or (pred==0 and vela=='bajista') else '❌'}\n"
+            f"   • ADX > 20 (mercado con fuerza) → {'✅' if adx > 20 else '❌'}\n"
+            f"   • No pegado a soporte/resistencia → {'✅' if not cerca_resistencia and not cerca_soporte else '❌'}"
+        )
 
         # Mensaje final
         return (
@@ -123,7 +135,8 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
             f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
             f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
             f"🔥 Fuerza de señal: {score}/100\n"
-            f"{semaforo}"
+            f"{semaforo}\n\n"
+            f"{checklist}"
         )
 
     except Exception as e:
