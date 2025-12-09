@@ -273,6 +273,24 @@ async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 # ------------------------------
+# Servidor Flask para Render
+# ------------------------------
+import threading
+from flask import Flask
+
+flask_app = Flask('')
+
+@flask_app.route('/')
+def home():
+    return "Tradersun Bot activo 🚀"
+
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=8080)
+
+# Lanzar Flask en un hilo paralelo
+threading.Thread(target=run_flask).start()
+
+# ------------------------------
 # Configuración del bot (main)
 # ------------------------------
 def main():
@@ -280,19 +298,8 @@ def main():
 
     # Comando inicial /start
     app.add_handler(CommandHandler("start", menu_otc))
-    # Selección de par (ej: EURUSD=X)
-    app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern=r".*=X$"))
-    # Selección de intervalo (ej: EURUSD=X|15m)
-    app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=r"^[A-Z]+.*\|[0-9]+[mh]$"))
-    # Volver a menú
-    app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern=r"nueva_senal"))
-    # Ver rendimiento histórico (ej: ver_rendimiento|EURUSD=X|15m)
-    app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern=r"^ver_rendimiento.*"))
-
+    ...
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-
-
-
