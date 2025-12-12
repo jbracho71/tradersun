@@ -1,0 +1,12 @@
+# cloudbuild.yaml
+# ES: Compila y sube imagen Docker del bot Tradersun
+# EN: Builds and pushes Docker image for Tradersun bot
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
+
+images:
+  - 'gcr.io/$PROJECT_ID/tradersun-bot'
