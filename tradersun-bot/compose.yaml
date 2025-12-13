@@ -1,0 +1,7 @@
+services:
+  tradersun:
+    build: .
+    container_name: tradersun-bot
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+    command: python TRADERSUN.py
