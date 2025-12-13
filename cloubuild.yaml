@@ -1,0 +1,27 @@
+# cloudbuild.yaml
+# ES: Compila y despliega el bot Tradersun en Cloud Run
+# EN: Builds and deploys Tradersun bot to Cloud Run
+
+steps:
+  # Paso 1: Construir imagen Docker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
+
+  # Paso 2: Subir imagen al Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
+
+  # Paso 3: Desplegar en Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run', 'deploy', 'tradersun-bot',
+        '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
+        '--platform', 'managed',
+        '--region', 'europe-west1',
+        '--allow-unauthenticated'
+      ]
+
+images:
+  - 'gcr.io/$PROJECT_ID/tradersun-bot'
