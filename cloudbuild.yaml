@@ -1,25 +1,3 @@
-<<<<<<< HEAD
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      [
-        'run', 'deploy', 'stateless-run-stg',
-        '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
-        '--platform', 'managed',
-        '--region', 'europe-west1',
-        '--allow-unauthenticated'
-      ]
-
-images:
-  - 'gcr.io/$PROJECT_ID/tradersun-bot'
-
-=======
-# cloudbuild.yaml
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
@@ -30,17 +8,16 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
-      [
-        'run', 'deploy', 'tradersun-bot',
-        '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
-        '--platform', 'managed',
-        '--region', 'europe-west1',
-        '--allow-unauthenticated'
-      ]
+      - run
+      - deploy
+      - tradersun-bot
+      - --image=gcr.io/$PROJECT_ID/tradersun-bot
+      - --platform=managed
+      - --region=europe-west1
+      - --allow-unauthenticated
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 images:
-  - 'gcr.io/$PROJECT_ID/tradersun-bot'
->>>>>>> 0c9476172d66818fb9c746e888d32dbb0a82c0f3
+  - gcr.io/$PROJECT_ID/tradersun-bot
