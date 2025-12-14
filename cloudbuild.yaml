@@ -13,7 +13,7 @@ steps:
     '--region', 'europe-west1',
     '--platform', 'managed',
     '--allow-unauthenticated',
-    '--memory', '512Mi',
-    '--cpu', '1',              # CAMBIO SUGERIDO: Más CPU para entrenamiento rápido
-    '--timeout', '120s'         # CAMBIO CRÍTICO: Más tiempo para el Health Check
+    '--memory', '1Gi',         # AUMENTADO: De 512Mi a 1Gi
+    '--cpu', '2',              # Máximo rendimiento para el arranque
+    '--timeout', '600s'        # AUMENTADO AL MÁXIMO: 10 minutos (600s) para el health check
   ]
