@@ -14,6 +14,6 @@ steps:
     '--platform', 'managed',
     '--allow-unauthenticated',
     '--memory', '512Mi',
-    '--cpu', '2',              # CAMBIO SUGERIDO: Más CPU para entrenamiento rápido
+    '--cpu', '1',              # CAMBIO SUGERIDO: Más CPU para entrenamiento rápido
     '--timeout', '120s'         # CAMBIO CRÍTICO: Más tiempo para el Health Check
   ]
