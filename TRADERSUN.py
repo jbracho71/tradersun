@@ -304,3 +304,16 @@ app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimien
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
+
+import asyncio
+import threading
+
+async def iniciar_bot():
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+if __name__ == "__main__":
+    threading.Thread(target=lambda: asyncio.run(iniciar_bot())).start()
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
