@@ -273,33 +273,34 @@ async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 # ------------------------------
-# Servidor Flask para Render
+# Servidor Flask para Cloud Run
 # ------------------------------
-import threading
-from flask import Flask
+from flask import Flask, request
+from telegram import Update
 
-flask_app = Flask('')
+flask_app = Flask(__name__)
+app = ApplicationBuilder().token(TOKEN).build()
 
 @flask_app.route('/')
 def home():
     return "Tradersun Bot activo 🚀"
 
-def run_flask():
-    flask_app.run(host='0.0.0.0', port=8080)
-
-# Lanzar Flask en un hilo paralelo
-threading.Thread(target=run_flask).start()
+# Ruta webhook para recibir mensajes de Telegram
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    app.update_queue.put(update)
+    return "ok"
 
 # ------------------------------
-# Configuración del bot (main)
+# Configuración del bot (handlers)
 # ------------------------------
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    # Comando inicial /start
-    app.add_handler(CommandHandler("start", menu_otc))
-    ...
-    app.run_polling()
+app.add_handler(CommandHandler("start", menu_otc))
+app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  # pares
+app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))       # intervalos
+app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
+app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
