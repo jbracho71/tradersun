@@ -1,28 +1,15 @@
 steps:
-  # Construir la imagen Docker
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'europe-west1-docker.pkg.dev/alpine-freedom-357704/cloud-run-source-deploy/tradersun-bot', '.']
-
-  # Subir la imagen a Artifact Registry
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'europe-west1-docker.pkg.dev/alpine-freedom-357704/cloud-run-source-deploy/tradersun-bot']
-
-  # Desplegar en Cloud Run
+    args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      [
-        'run', 'deploy', 'tradersun-git',
-        '--image', 'europe-west1-docker.pkg.dev/alpine-freedom-357704/cloud-run-source-deploy/tradersun-bot',
-        '--platform', 'managed',
-        '--region', 'europe-west1',
-        '--allow-unauthenticated',
-        '--port', '8080'
-      ]
-
-options:
-  logging: CLOUD_LOGGING_ONLY
-
-images:
-  - 'europe-west1-docker.pkg.dev/alpine-freedom-357704/cloud-run-source-deploy/tradersun-bot'
+    entrypoint: 'gcloud'
+    args: [
+      'run', 'deploy', 'tradersun-git',
+      '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
+      '--region', 'europe-west1',
+      '--platform', 'managed',
+      '--allow-unauthenticated'
+    ]
 
