@@ -15,5 +15,5 @@ steps:
     '--allow-unauthenticated',
     '--memory', '512Mi',
     '--cpu', '2',              # CAMBIO SUGERIDO: Más CPU para entrenamiento rápido
-    '--timeout', '60s'         # CAMBIO CRÍTICO: Más tiempo para el Health Check
+    '--timeout', '120s'         # CAMBIO CRÍTICO: Más tiempo para el Health Check
   ]
