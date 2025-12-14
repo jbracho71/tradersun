@@ -1,10 +1,13 @@
 steps:
+# 1. Construir la imagen de Docker
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
 
+# 2. Subir la imagen al registro de contenedores (Artifact Registry/GCR)
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
 
+# 3. Desplegar la imagen en Cloud Run
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'gcloud'
   args: [
@@ -15,5 +18,5 @@ steps:
     '--allow-unauthenticated',
     '--memory', '512Mi',
     '--cpu', '1',
-    '--timeout', '15s'
+    '--timeout', '60s' # AUMENTADO: Da más tiempo para que el modelo entrene y el servidor arranque.
   ]
