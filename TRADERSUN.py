@@ -301,9 +301,6 @@ app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))     
 app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
 app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
 
 import asyncio
 import threading
@@ -314,7 +311,9 @@ async def iniciar_bot():
     await app.updater.start_polling()
 
 if __name__ == "__main__":
+    # Inicia el bot en segundo plano
     threading.Thread(target=lambda: asyncio.run(iniciar_bot())).start()
+
+    # Inicia el servidor Flask en el puerto 8080
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
-
