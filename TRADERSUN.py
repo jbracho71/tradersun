@@ -4,13 +4,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
+import os # Necesario para leer la variable de entorno PORT
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from flask import Flask, request # Importar Flask para el servidor web/webhook
 
-TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk"  # Reemplaza con tu token real de BotFather
+# NOTA: Reemplaza con tu token real de BotFather
+TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYH3-uOk" 
 
 # ------------------------------
 # Entrenamiento del modelo
@@ -20,6 +23,7 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
     if df.empty:
         return None, 0.0, None
 
+    # Nota: yfinance ya devuelve datos de tiempo real/OTC para los pares con "=X"
     df.index = df.index.tz_convert("America/Caracas")
 
     close = df["Close"].squeeze()
@@ -32,7 +36,7 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
     df["STOCH"] = ta.momentum.StochasticOscillator(high, low, close).stoch()
     df["ADX"] = ta.trend.ADXIndicator(high, low, close).adx()
 
-    # 🔎 Calcular ATR y normalizar a índice 0–100
+    # Calcular ATR y normalizar a índice 0–100
     atr = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range()
     df["ATR_Index"] = (atr / atr.max()) * 100
 
@@ -57,6 +61,7 @@ def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
+        # Se descarga una muestra reciente para análisis
         df = yf.download(par, period="5d", interval=intervalo, auto_adjust=True)
         if df.empty or modelo is None:
             return f"⚠️ No se pudieron obtener datos para {par} en {intervalo}"
@@ -146,16 +151,18 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
 # ------------------------------
 def generar_grafico_rendimiento(df: pd.DataFrame, par: str, intervalo: str) -> BytesIO:
     df = df.copy()
-    df["target"] = np.where(df["Close"].values > df["Open"].values, 1, 0)
+    # Usamos RSI > 50 como una regla de trading sencilla para simular el acierto
     df["pred_dummy"] = np.where(df["RSI"] > 50, 1, 0)
+    df["target"] = np.where(df["Close"].values > df["Open"].values, 1, 0)
     df["acierto"] = (df["target"] == df["pred_dummy"]).astype(int)
+    # Calculamos la precisión rolling de los últimos 50 períodos
     df["rolling_acc"] = df["acierto"].rolling(50).mean() * 100
 
     plt.figure(figsize=(8, 4))
     plt.plot(df.index, df["rolling_acc"], label="Precisión rolling (RSI>50 ref.)", color="#2b8a3e")
     plt.axhline(50, color="#999", linestyle="--", linewidth=1)
-    plt.axhline(70, color="red", linestyle="--", linewidth=1, label="RSI 70 (sobrecompra)")
-    plt.axhline(30, color="blue", linestyle="--", linewidth=1, label="RSI 30 (sobreventa)")
+    plt.axhline(70, color="red", linestyle="--", linewidth=1)
+    plt.axhline(30, color="blue", linestyle="--", linewidth=1)
     plt.title(f"Rendimiento histórico - {par} ({intervalo})")
     plt.ylabel("Precisión (%)")
     plt.xlabel("Tiempo")
@@ -168,7 +175,7 @@ def generar_grafico_rendimiento(df: pd.DataFrame, par: str, intervalo: str) -> B
     buf.seek(0)
     return buf
 # ------------------------------
-# Menú de pares con banderas
+# Handlers del Bot de Telegram
 # ------------------------------
 async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -182,24 +189,24 @@ async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("🇪🇺/🇨🇭 EUR/CHF OTC", callback_data="EURCHF=X")],
         [InlineKeyboardButton("🇳🇿/🇺🇸 NZD/USD OTC", callback_data="NZDUSD=X"),
          InlineKeyboardButton("🇬🇧/🇯🇵 GBP/JPY OTC", callback_data="GBPJPY=X")],
-        [InlineKeyboardButton("🇨🇭/🇬🇧 GBP/CHF OTC", callback_data="GBPCHF=X"),
-         InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data="ver_rendimiento")]
+        [InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data="ver_rendimiento")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if update.message:
-        await update.message.reply_text("📈 Selecciona un par OTC:", reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.message.reply_text("📈 Selecciona un par OTC:", reply_markup=reply_markup)
+    # Usa el objeto update.effective_message para responder de forma consistente
+    message = update.effective_message
+    await message.reply_text("📈 Selecciona un par OTC:", reply_markup=reply_markup)
 
-# ------------------------------
-# Selección de par → intervalos
-# ------------------------------
 async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     par = query.data
 
+    # Si se pulsa 'Ver rendimiento histórico' sin haber seleccionado par/intervalo
+    if par == "ver_rendimiento":
+        await query.edit_message_text(text="⚠️ Primero debes seleccionar un par y un intervalo para ver el rendimiento.")
+        return
+    
     keyboard = [
         [InlineKeyboardButton("1m", callback_data=f"{par}|1m")],
         [InlineKeyboardButton("5m", callback_data=f"{par}|5m")],
@@ -208,9 +215,7 @@ async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text=f"⏱ Selecciona intervalo para {par}:", reply_markup=reply_markup)
-# ------------------------------
-# Selección de intervalo → señal
-# ------------------------------
+
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -233,93 +238,100 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # Guardar el DataFrame histórico para el gráfico
     context.user_data["df_hist"] = df_hist
+    context.user_data["par"] = par
+    context.user_data["intervalo"] = intervalo
 
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
-# ------------------------------
-# Nueva señal → volver al menú
-# ------------------------------
 async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await menu_otc(update, context)
 
-# ------------------------------
-# Ver rendimiento histórico
-# ------------------------------
 async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    # Intenta obtener par e intervalo de la llamada Callback (ej: ver_rendimiento|EURUSD=X|5m)
     parts = query.data.split("|")
-    if parts[0] == "ver_rendimiento" and len(parts) == 3:
+    
+    if len(parts) == 3:
         _, par, intervalo = parts
-        _, _, df_hist = entrenar_modelo(par, intervalo)
+        df_hist = context.user_data.get("df_hist")
+        
+        # Si se accede al rendimiento desde un botón donde no se ha guardado el DF (e.g., al iniciar /start)
+        if df_hist is None or context.user_data.get("par") != par or context.user_data.get("intervalo") != intervalo:
+             await query.edit_message_text(f"Recargando datos para el gráfico de {par}...")
+             _, _, df_hist = entrenar_modelo(par, intervalo)
     else:
-        df_hist = context.user_data.get("df_hist", None)
-        par = "PAR DESCONOCIDO"
-        intervalo = "INTERVALO"
-
-    if df_hist is None or df_hist.empty:
-        await query.edit_message_text("⚠️ No hay datos históricos disponibles para generar el gráfico.")
+        # Si el usuario pulsa 'ver_rendimiento' en el menú principal
+        await query.edit_message_text("⚠️ No hay un par/intervalo activo para generar el gráfico.")
         return
 
+    if df_hist is None or df_hist.empty:
+        await query.edit_message_text(f"⚠️ No hay datos históricos disponibles para generar el gráfico de {par} ({intervalo}).")
+        return
+
+    # Generar el gráfico y enviarlo
     buf = generar_grafico_rendimiento(df_hist, par, intervalo)
 
-    await query.message.reply_photo(
+    await context.bot.send_photo(
+        chat_id=query.message.chat_id,
         photo=InputFile(buf, filename="rendimiento.png"),
         caption=f"📊 Rendimiento histórico de {par} ({intervalo})"
     )
-
-# ------------------------------
-# Servidor Flask para Cloud Run
-# ------------------------------
-from flask import Flask, request
-from telegram import Update
-
-flask_app = Flask(__name__)
-app = ApplicationBuilder().token(TOKEN).build()
-
-@flask_app.route('/')
-def home():
-    return "Tradersun Bot activo 🚀"
-
-# Ruta webhook para recibir mensajes de Telegram
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    app.update_queue.put(update)
-    return "ok"
+    # Opcionalmente, vuelve a enviar el menú
+    await menu_otc(update, context)
 
 # ------------------------------
 # Configuración del bot (handlers)
 # ------------------------------
+app = ApplicationBuilder().token(TOKEN).build()
+
 app.add_handler(CommandHandler("start", menu_otc))
-app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  # pares
-app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))       # intervalos
+# Expresión regular para capturar el par (no tiene el | del intervalo)
+app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*")) 
+# Expresión regular para capturar el par|intervalo
+app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))      
 app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
 app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
 
-import asyncio
-import threading
-import time
+# ------------------------------
+# Servidor Flask para Cloud Run (¡LA CORRECCIÓN CLAVE!)
+# ------------------------------
 
-async def iniciar_bot():
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
+flask_app = Flask(__name__)
 
-def lanzar_bot():
-    asyncio.run(iniciar_bot())
+# Ruta principal para el health check de Cloud Run
+@flask_app.route('/')
+def home():
+    # El health check debe pasar rápidamente, indicando que el contenedor está vivo
+    return "Tradersun Bot activo 🚀"
 
+# Ruta webhook para recibir mensajes de Telegram (Método POST)
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    # 1. Obtiene la actualización (mensaje, callback, etc.) del cuerpo de la petición POST
+    json_data = request.get_json(force=True)
+    update = Update.de_json(json_data, app.bot)
+    
+    # 2. Procesa la actualización de forma síncrona/asíncrona
+    # En Cloud Run/servidor, usamos process_update para que el objeto 'app' 
+    # se encargue de buscar el handler correcto (Command, CallbackQuery, etc.).
+    # Esto reemplaza el uso de polling.
+    app.process_update(update) 
+    
+    # 3. Devuelve una respuesta 200 OK a Telegram para indicar que el mensaje fue recibido.
+    return "ok" 
+
+# Arranque final del servidor web
 if __name__ == "__main__":
-    try:
-        hilo_bot = threading.Thread(target=lanzar_bot)
-        hilo_bot.start()
-        time.sleep(2)  # Espera para que el bot arranque antes de Flask
-        port = int(os.environ.get("PORT", 8080))
-        flask_app.run(host="0.0.0.0", port=port)
-    except Exception as e:
-        print(f"❌ Error en arranque: {e}")
+    # La variable de entorno PORT es seteada por Cloud Run (si no, usa 8080)
+    port = int(os.environ.get("PORT", 8080)) 
+    
+    # Inicia el servidor Flask en el puerto asignado
+    # Flask es ahora el único proceso en ejecución, cumpliendo el requisito de Cloud Run.
+    flask_app.run(host="0.0.0.0", port=port, debug=False)
