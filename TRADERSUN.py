@@ -315,13 +315,11 @@ def lanzar_bot():
     asyncio.run(iniciar_bot())
 
 if __name__ == "__main__":
-    # Inicia el bot en segundo plano
-    hilo_bot = threading.Thread(target=lanzar_bot)
-    hilo_bot.start()
-
-    # Espera breve para que el bot arranque
-    time.sleep(2)
-
-    # Inicia Flask en el puerto 8080
-    port = int(os.environ.get("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
+    try:
+        hilo_bot = threading.Thread(target=lanzar_bot)
+        hilo_bot.start()
+        time.sleep(2)  # Espera para que el bot arranque antes de Flask
+        port = int(os.environ.get("PORT", 8080))
+        flask_app.run(host="0.0.0.0", port=port)
+    except Exception as e:
+        print(f"❌ Error en arranque: {e}")
