@@ -7,4 +7,7 @@ python-telegram-bot==20.8
 matplotlib
 Flask
 joblib  # <-- ¡Asegúrate de que esta línea esté aquí!
+<<<<<<< HEAD
 asgiref
+=======
+>>>>>>> 67f0cf5e95a581a29aa3eddd2a061741047bfcf1

@@ -220,4 +220,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080)) 
     
     # El servidor Flask arranca inmediatamente porque la carga del modelo ya terminó
+<<<<<<< HEAD
     flask_app.run(host="0.0.0.0", port=port, debug=False)

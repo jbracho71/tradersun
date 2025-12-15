@@ -1,15 +1,19 @@
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'gcloud'
-    args: [
-      'run', 'deploy', 'tradersun-git',
-      '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
-      '--region', 'europe-west1',
-      '--platform', 'managed',
-      '--allow-unauthenticated'
-    ]
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/tradersun-bot', '.']
 
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/$PROJECT_ID/tradersun-bot']
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'gcloud'
+  args: [
+    'run', 'deploy', 'tradersun-git',
+    '--image', 'gcr.io/$PROJECT_ID/tradersun-bot',
+    '--region', 'europe-west1',
+    '--platform', 'managed',
+    '--allow-unauthenticated',
+    '--memory', '1Gi',         # AUMENTADO: De 512Mi a 1Gi
+    '--cpu', '2',              # Máximo rendimiento para el arranque
+    '--timeout', '600s'        # AUMENTADO AL MÁXIMO: 10 minutos (600s) para el health check
+  ]
