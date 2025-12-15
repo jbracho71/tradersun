@@ -194,19 +194,23 @@ def home():
     return "Tradersun Bot activo 🚀"
 
 # Ruta webhook
-# Ruta webhook
+from asgiref.sync import sync_to_async
+
+# ... (código anterior) ...
+
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         json_data = request.get_json(force=True)
         update = Update.de_json(json_data, app.bot)
-        
-        # Procesa la actualización
-        app.process_update(update) 
-        
-        # Respuesta rápida para evitar timeouts de Telegram
+
+        # SOLUCIÓN: Usar sync_to_async para ejecutar la corutina
+        sync_to_async(app.process_update)(update) 
+
         return "ok"
     except Exception as e:
+        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
+        return "ok"   except Exception as e:
         # 🛑 ¡CRÍTICO! Imprime el error exacto en los logs de Cloud Run 🛑
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
         # Asegúrate de devolver 'ok' a Telegram
