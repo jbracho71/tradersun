@@ -4,17 +4,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
-import os 
-import joblib # Necesario para cargar el modelo pre-entrenado
+import os
+import joblib 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-from flask import Flask, request 
+from flask import Flask, request
+from asgiref.sync import sync_to_async # NECESARIO para Webhooks asíncronos
 
 # NOTA: Reemplaza con tu token real de BotFather
-TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYH3-uOk" 
+TOKEN = "8246576801:AAEORFpWu_gwXhRqQznMb1mwnCYH3-uOk" # Usa tu token real
 
 # ----------------------------------------------------
 # INICIALIZACIÓN GLOBAL DE MODELO (CARGA RÁPIDA)
@@ -31,15 +32,13 @@ except FileNotFoundError:
     PRECISION_GLOBAL = 0.0
 
 # ------------------------------
-# Función de Entrenamiento (OBSOLETA EN EL ARRANQUE DEL BOT)
-# Se mantiene por si se quiere ejecutar en modo mantenimiento, pero el bot no la usa.
+# Función de Entrenamiento (MANTENIMIENTO/DATOS HISTÓRICOS)
 # ------------------------------
 def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
-    # Esta función ya no debe ser llamada al inicio del servidor.
-    print(f"Advertencia: Entrenando modelo de mantenimiento para {par}...")
+    # Esta función se mantiene solo para descargar el DF histórico para el gráfico.
     df = yf.download(par, period=dias, interval=intervalo, auto_adjust=True)
-    # ... (Se necesitaría aquí toda la lógica de entrenamiento para ser completa)
-    return None, 0.0, df # Retornamos None para que el bot use el modelo global
+    # Si la lógica original de entrenamiento no se usa, retornamos valores nulos
+    return None, 0.0, df 
 
 # ------------------------------
 # Generación de señal con análisis gráfico automático + semáforo + checklist
@@ -109,20 +108,20 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         # Checklist rápido (✅/❌)
         checklist = (
             f"📋 Checklist disciplina:\n"
-            f"   • Tendencia confirma → {'✅' if (pred==1 and tendencia=='alcista') or (pred==0 and tendencia=='bajista') else '❌'}\n"
-            f"   • Última vela confirma → {'✅' if (pred==1 and vela=='alcista') or (pred==0 and vela=='bajista') else '❌'}\n"
-            f"   • ADX > 20 (mercado con fuerza) → {'✅' if adx > 20 else '❌'}\n"
-            f"   • No pegado a soporte/resistencia → {'✅' if not cerca_resistencia and not cerca_soporte else '❌'}"
+            f"   • Tendencia confirma → {'✅' if (pred==1 and tendencia=='alcista') or (pred==0 and tendencia=='bajista') else '❌'}\n"
+            f"   • Última vela confirma → {'✅' if (pred==1 and vela=='alcista') or (pred==0 and vela=='bajista') else '❌'}\n"
+            f"   • ADX > 20 (mercado con fuerza) → {'✅' if adx > 20 else '❌'}\n"
+            f"   • No pegado a soporte/resistencia → {'✅' if not cerca_resistencia and not cerca_soporte else '❌'}"
         )
 
         # Mensaje final
         return (
             f"📈 Señal: {'CALL' if pred==1 else 'PUT'} ({confianza:.2f}% confianza)\n"
             f"📊 Análisis gráfico:\n"
-            f"   • Última vela: {vela}\n"
-            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
-            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
-            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
+            f"   • Última vela: {vela}\n"
+            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
+            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
+            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
             f"🔥 Fuerza de señal: {score}/100\n"
             f"{semaforo}\n\n"
             f"{checklist}"
@@ -130,15 +129,17 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
+    
 # ------------------------------
-# Rendimiento histórico (gráfico)
+# Handlers del Bot de Telegram
 # ------------------------------
-# ... (la función generar_grafico_rendimiento no necesita cambios)
+async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # ... (contenido de la función menu_otc) ...
+    pass # Reemplaza con el contenido real
 
-# ------------------------------
-# Handlers del Bot de Telegram (Se mantienen igual)
-# ------------------------------
-# ... (menu_otc, manejar_seleccion, manejar_rendimiento se mantienen igual) ...
+async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # ... (contenido de la función manejar_seleccion) ...
+    pass # Reemplaza con el contenido real
 
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -149,7 +150,7 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(text=f"🔍 Analizando {par} en {intervalo}...")
 
-    # 🛑 CAMBIO CRÍTICO: USAMOS EL MODELO GLOBAL CARGADO AL INICIO 🛑
+    # 🛑 USO DEL MODELO GLOBAL 🛑
     modelo = MODELO_GLOBAL 
     precision = PRECISION_GLOBAL
     
@@ -173,17 +174,25 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
-# ... (resto de los handlers se mantienen igual) ...
+# ... (restantes handlers como manejar_nueva_senal, manejar_rendimiento) ...
+async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    pass # Reemplaza con el contenido real
+
+async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    pass # Reemplaza con el contenido real
 
 # ------------------------------
 # Configuración del bot (handlers)
 # ------------------------------
 app = ApplicationBuilder().token(TOKEN).build()
-# ... (handlers se mantienen igual) ...
-
+app.add_handler(CommandHandler("start", menu_otc))
+app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  # pares
+app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))         # intervalos
+app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
+app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
 # ------------------------------
-# Servidor Flask para Cloud Run
+# Servidor Flask para Cloud Run (WEBHOOK)
 # ------------------------------
 
 flask_app = Flask(__name__)
@@ -193,32 +202,28 @@ def home():
     # El health check ahora es instantáneo
     return "Tradersun Bot activo 🚀"
 
-# Ruta webhook
-from asgiref.sync import sync_to_async
-
-# ... (código anterior) ...
-
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         json_data = request.get_json(force=True)
         update = Update.de_json(json_data, app.bot)
 
-        # SOLUCIÓN: Usar sync_to_async para ejecutar la corutina
+        # 🛑 SOLUCIÓN CRÍTICA: Usar sync_to_async para ejecutar la corutina
         sync_to_async(app.process_update)(update) 
 
         return "ok"
     except Exception as e:
+        # 🛑 Imprime el error exacto en los logs si algo falla al procesar el mensaje 🛑
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        return "ok"   except Exception as e:
-        # 🛑 ¡CRÍTICO! Imprime el error exacto en los logs de Cloud Run 🛑
-        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        # Asegúrate de devolver 'ok' a Telegram
+        # Devuelve 'ok' para que Telegram no reintente el mensaje
         return "ok"
-# Arranque final del servidor web
+
+# ------------------------------
+# Arranque final del servidor web (SOLO FLASK)
+# ------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080)) 
     
     # El servidor Flask arranca inmediatamente porque la carga del modelo ya terminó
-<<<<<<< HEAD
+    # Esta es la línea que Cloud Run necesita.
     flask_app.run(host="0.0.0.0", port=port, debug=False)
