@@ -194,17 +194,23 @@ def home():
     return "Tradersun Bot activo 🚀"
 
 # Ruta webhook
+# Ruta webhook
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
-    json_data = request.get_json(force=True)
-    update = Update.de_json(json_data, app.bot)
-    
-    # Procesa la actualización
-    app.process_update(update) 
-    
-    # Respuesta rápida para evitar timeouts de Telegram
-    return "ok" 
-
+    try:
+        json_data = request.get_json(force=True)
+        update = Update.de_json(json_data, app.bot)
+        
+        # Procesa la actualización
+        app.process_update(update) 
+        
+        # Respuesta rápida para evitar timeouts de Telegram
+        return "ok"
+    except Exception as e:
+        # 🛑 ¡CRÍTICO! Imprime el error exacto en los logs de Cloud Run 🛑
+        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
+        # Asegúrate de devolver 'ok' a Telegram
+        return "ok"
 # Arranque final del servidor web
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080)) 
