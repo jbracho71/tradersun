@@ -205,25 +205,29 @@ def home():
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        # 1. Obtener los datos JSON de la solicitud POST
         json_data = request.get_json(force=True)
+        
+        # 2. Convertir los datos JSON en un objeto Update de Telegram
         update = Update.de_json(json_data, app.bot)
-
-        # 🛑 SOLUCIÓN CRÍTICA: Usar sync_to_async para ejecutar la corutina
-        sync_to_async(app.process_update)(update) 
-
+        
+        # 3. SOLUCIÓN FINAL: Ejecutar la función ASÍNCRONA de Telegram (app.process_update)
+        #    desde la función SÍNCRONA de Flask (webhook) usando asyncio.run().
+        #    Esto crea un pequeño bucle de eventos para ejecutar la corrutina.
+        asyncio.run(app.process_update(update))
+        
+        # 4. Devolver respuesta OK a Telegram inmediatamente
         return "ok"
+        
     except Exception as e:
-        # 🛑 Imprime el error exacto en los logs si algo falla al procesar el mensaje 🛑
+        # En caso de error, registra el fallo en el log de Cloud Run
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        # Devuelve 'ok' para que Telegram no reintente el mensaje
+        # Devuelve 'ok' para evitar que Telegram reintente enviar el mismo mensaje
         return "ok"
 
-# ------------------------------
-# Arranque final del servidor web (SOLO FLASK)
-# ------------------------------
+
+# Arranque final del servidor web
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080)) 
-    
+    port = int(os.environ.get("PORT", 8080))
     # El servidor Flask arranca inmediatamente porque la carga del modelo ya terminó
-    # Esta es la línea que Cloud Run necesita.
     flask_app.run(host="0.0.0.0", port=port, debug=False)
