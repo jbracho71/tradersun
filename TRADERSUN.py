@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 import os
+import asyncio # <--- ¡VA AQUÍ!
 import joblib 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
