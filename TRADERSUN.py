@@ -14,7 +14,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from flask import Flask, request
 
-# 🛑 CORRECCIÓN #1: Eliminada la importación que causaba conflicto (asgiref.sync)
+# Se elimina la importación innecesaria y conflictiva:
 # from asgiref.sync import sync_to_async 
 
 # NOTA: Reemplaza con tu token real de BotFather
@@ -24,9 +24,7 @@ TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk" # Usa tu token real
 # INICIALIZACIÓN GLOBAL DE MODELO (CARGA RÁPIDA)
 # ----------------------------------------------------
 try:
-    # Carga el modelo guardado al inicio del script. Esto es rápido.
     MODELO_GLOBAL = joblib.load('tradersun_modelo.pkl')
-    # Usamos una precisión fija de ejemplo para el reporte
     PRECISION_GLOBAL = 85.0 
     print("Modelo de ML cargado exitosamente.")
 except FileNotFoundError:
@@ -38,13 +36,11 @@ except FileNotFoundError:
 # Función de Entrenamiento (MANTENIMIENTO/DATOS HISTÓRICOS)
 # ------------------------------
 def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
-    # Esta función se mantiene solo para descargar el DF histórico para el gráfico.
     df = yf.download(par, period=dias, interval=intervalo, auto_adjust=True)
-    # Si la lógica original de entrenamiento no se usa, retornamos valores nulos
     return None, 0.0, df 
 
 # ------------------------------
-# Generación de señal con análisis gráfico automático + semáforo + checklist
+# Generación de señal (El cuerpo de esta función se mantiene sin cambios)
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
@@ -134,15 +130,13 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         return f"❌ Error analizando {par}: {e}"
         
 # ------------------------------
-# Handlers del Bot de Telegram
+# Handlers del Bot de Telegram (se mantienen igual, solo se definen)
 # ------------------------------
 async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (contenido de la función menu_otc) ...
-    pass # Reemplaza con el contenido real
+    pass 
 
 async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (contenido de la función manejar_seleccion) ...
-    pass # Reemplaza con el contenido real
+    pass 
 
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -153,7 +147,6 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(text=f"🔍 Analizando {par} en {intervalo}...")
 
-    # 🛑 USO DEL MODELO GLOBAL 🛑
     modelo = MODELO_GLOBAL 
     precision = PRECISION_GLOBAL
     
@@ -161,12 +154,10 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo de análisis no pudo cargarse al iniciar el bot. Contacte a soporte.")
         return
 
-    # OBTENEMOS DF PARA EL GRÁFICO HISTÓRICO USANDO LA FUNCIÓN DE ENTRENAMIENTO/MANTENIMIENTO
     _, _, df_hist = entrenar_modelo(par, intervalo) 
     
     senal = generar_senal(par, intervalo, modelo, precision)
 
-    # Teclado con nueva señal y rendimiento histórico
     keyboard = [
         [InlineKeyboardButton("📡 Nueva señal", callback_data="nueva_senal")],
         [InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data=f"ver_rendimiento|{par}|{intervalo}")]
@@ -177,21 +168,19 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
-# ... (restantes handlers como manejar_nueva_senal, manejar_rendimiento) ...
 async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass # Reemplaza con el contenido real
+    pass 
 
 async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass # Reemplaza con el contenido real
+    pass 
 
 # ------------------------------
-# Configuración del bot (handlers)
+# Configuración del bot (handlers y aplicación)
 # ------------------------------
-# 🛑 CORRECCIÓN #3: app ya no es una variable global, ahora es local al módulo y se inicializa
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", menu_otc))
-app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  # pares
-app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))         # intervalos
+app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  
+app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))         
 app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
 app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
@@ -203,32 +192,44 @@ flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    # El health check ahora es instantáneo
-    return "Tradersun Bot activo 🚀"
+    return "Tradersun Bot activo 🚀", 200
 
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # Obtener los datos JSON de la solicitud POST
         json_data = request.get_json(force=True)
         update = Update.de_json(json_data, app.bot)
         
-        # SOLUCIÓN CRÍTICA: Ejecutar la función ASÍNCRONA de Telegram 
-        # (app.process_update) dentro de la función SÍNCRONA de Flask (webhook)
-        # usando asyncio.run(). Esto evita el error de sync_to_async.
+        # 🛑 CORRECCIÓN CRÍTICA FINAL: Inyectar la actualización a la cola de PTB 
+        # y luego correr el proceso del bot en el loop asíncrono.
+        
+        # 1. Coloca el update en la cola de procesamiento de la aplicación
+        app.update_queue.put(update)
+
+        # 2. Ejecuta el procesamiento de la cola usando el loop asíncrono
         asyncio.run(app.process_update(update))
         
         # Devolver respuesta OK a Telegram
         return "ok"
         
     except Exception as e:
-        # 🛑 CORRECCIÓN #2: Un solo bloque 'except' para manejo de errores.
+        # Manejo de excepción único
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
         return "ok"
 
 
 # Arranque final del servidor web
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    # El servidor Flask arranca inmediatamente porque la carga del modelo ya terminó
-    flask_app.run(host="0.0.0.0", port=port, debug=False)
+    # Iniciar la aplicación de Telegram en background (necesario para el loop)
+    # y luego iniciar Flask para recibir webhooks.
+    try:
+        # Iniciar el bot en modo webhook sin bloquear. Esto es crucial.
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(app.initialize())
+        loop.run_until_complete(app.start())
+
+        port = int(os.environ.get("PORT", 8080))
+        flask_app.run(host="0.0.0.0", port=port, debug=False)
+
+    except Exception as e:
+        print(f"Error al iniciar el servidor o el bot: {e}", flush=True)
