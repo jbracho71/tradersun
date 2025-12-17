@@ -16,7 +16,7 @@ from flask import Flask, request
 from asgiref.sync import sync_to_async # NECESARIO para Webhooks asíncronos
 
 # NOTA: Reemplaza con tu token real de BotFather
-TOKEN = "8246576801:AAEORFpWu_gwXhRqQznMb1mwnCYH3-uOk" # Usa tu token real
+TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk" # Usa tu token real
 
 # ----------------------------------------------------
 # INICIALIZACIÓN GLOBAL DE MODELO (CARGA RÁPIDA)
@@ -206,20 +206,22 @@ def home():
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # 1. Obtener los datos JSON de la solicitud POST
+        # Obtener los datos JSON de la solicitud POST
         json_data = request.get_json(force=True)
-        
-        # 2. Convertir los datos JSON en un objeto Update de Telegram
         update = Update.de_json(json_data, app.bot)
         
-        # 3. SOLUCIÓN FINAL: Ejecutar la función ASÍNCRONA de Telegram (app.process_update)
-        #    desde la función SÍNCRONA de Flask (webhook) usando asyncio.run().
-        #    Esto crea un pequeño bucle de eventos para ejecutar la corrutina.
+        # SOLUCIÓN CRÍTICA: Ejecutar la función ASÍNCRONA de Telegram 
+        # (app.process_update) dentro de la función SÍNCRONA de Flask (webhook)
+        # usando asyncio.run(). Esto evita el error de sync_to_async.
         asyncio.run(app.process_update(update))
         
-        # 4. Devolver respuesta OK a Telegram inmediatamente
+        # Devolver respuesta OK a Telegram
         return "ok"
         
+    except Exception as e:
+        # En caso de error, lo registramos y devolvemos 'ok' para que Telegram no reintente
+        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
+        return "ok"       
     except Exception as e:
         # En caso de error, registra el fallo en el log de Cloud Run
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
