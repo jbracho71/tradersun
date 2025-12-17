@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 import os
-import asyncio # <--- ¡VA AQUÍ!
+import asyncio 
 import joblib 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
@@ -13,7 +13,9 @@ from sklearn.model_selection import train_test_split
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from flask import Flask, request
-from asgiref.sync import sync_to_async # NECESARIO para Webhooks asíncronos
+
+# 🛑 CORRECCIÓN #1: Eliminada la importación que causaba conflicto (asgiref.sync)
+# from asgiref.sync import sync_to_async 
 
 # NOTA: Reemplaza con tu token real de BotFather
 TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk" # Usa tu token real
@@ -109,20 +111,20 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         # Checklist rápido (✅/❌)
         checklist = (
             f"📋 Checklist disciplina:\n"
-            f"   • Tendencia confirma → {'✅' if (pred==1 and tendencia=='alcista') or (pred==0 and tendencia=='bajista') else '❌'}\n"
-            f"   • Última vela confirma → {'✅' if (pred==1 and vela=='alcista') or (pred==0 and vela=='bajista') else '❌'}\n"
-            f"   • ADX > 20 (mercado con fuerza) → {'✅' if adx > 20 else '❌'}\n"
-            f"   • No pegado a soporte/resistencia → {'✅' if not cerca_resistencia and not cerca_soporte else '❌'}"
+            f"   • Tendencia confirma → {'✅' if (pred==1 and tendencia=='alcista') or (pred==0 and tendencia=='bajista') else '❌'}\n"
+            f"   • Última vela confirma → {'✅' if (pred==1 and vela=='alcista') or (pred==0 and vela=='bajista') else '❌'}\n"
+            f"   • ADX > 20 (mercado con fuerza) → {'✅' if adx > 20 else '❌'}\n"
+            f"   • No pegado a soporte/resistencia → {'✅' if not cerca_resistencia and not cerca_soporte else '❌'}"
         )
 
         # Mensaje final
         return (
             f"📈 Señal: {'CALL' if pred==1 else 'PUT'} ({confianza:.2f}% confianza)\n"
             f"📊 Análisis gráfico:\n"
-            f"   • Última vela: {vela}\n"
-            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
-            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
-            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
+            f"   • Última vela: {vela}\n"
+            f"   • Tendencia EMA20/EMA50: {tendencia}\n"
+            f"   • Soporte: {soporte:.2f}, Resistencia: {resistencia:.2f}\n"
+            f"   • ADX={adx:.2f}, ATR={atr_index:.2f}/100\n"
             f"🔥 Fuerza de señal: {score}/100\n"
             f"{semaforo}\n\n"
             f"{checklist}"
@@ -130,7 +132,7 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
-    
+        
 # ------------------------------
 # Handlers del Bot de Telegram
 # ------------------------------
@@ -185,6 +187,7 @@ async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ------------------------------
 # Configuración del bot (handlers)
 # ------------------------------
+# 🛑 CORRECCIÓN #3: app ya no es una variable global, ahora es local al módulo y se inicializa
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", menu_otc))
 app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  # pares
@@ -219,13 +222,8 @@ def webhook():
         return "ok"
         
     except Exception as e:
-        # En caso de error, lo registramos y devolvemos 'ok' para que Telegram no reintente
+        # 🛑 CORRECCIÓN #2: Un solo bloque 'except' para manejo de errores.
         print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        return "ok"       
-    except Exception as e:
-        # En caso de error, registra el fallo en el log de Cloud Run
-        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        # Devuelve 'ok' para evitar que Telegram reintente enviar el mismo mensaje
         return "ok"
 
 
