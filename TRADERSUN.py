@@ -130,13 +130,13 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
         return f"❌ Error analizando {par}: {e}"
         
 # ------------------------------
-# Handlers del Bot de Telegram (se mantienen igual, solo se definen)
+# Handlers del Bot de Telegram
 # ------------------------------
 async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+    await update.message.reply_text("🚀 Bienvenido a Tradersun Bot. Usa los botones para generar señales.")
 
 async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+    await update.message.reply_text("⚡ Selección recibida. (Handler en construcción)")
 
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -151,11 +151,10 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     precision = PRECISION_GLOBAL
     
     if modelo is None:
-        await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo de análisis no pudo cargarse al iniciar el bot. Contacte a soporte.")
+        await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo de análisis no pudo cargarse al iniciar el bot.")
         return
 
     _, _, df_hist = entrenar_modelo(par, intervalo) 
-    
     senal = generar_senal(par, intervalo, modelo, precision)
 
     keyboard = [
@@ -169,10 +168,10 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
 async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+    await update.message.reply_text("📡 Generando nueva señal... (Handler en construcción)")
 
 async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+    await update.message.reply_text("📊 Mostrando rendimiento histórico... (Handler en construcción)")
 
 # ------------------------------
 # Configuración del bot (handlers y aplicación)
@@ -185,51 +184,7 @@ app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal")
 app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
 
 # ------------------------------
-# Servidor Flask para Cloud Run (WEBHOOK)
+# Arranque final del bot (modo polling)
 # ------------------------------
-
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def home():
-    return "Tradersun Bot activo 🚀", 200
-
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        json_data = request.get_json(force=True)
-        update = Update.de_json(json_data, app.bot)
-        
-        # 🛑 CORRECCIÓN CRÍTICA FINAL: Inyectar la actualización a la cola de PTB 
-        # y luego correr el proceso del bot en el loop asíncrono.
-        
-        # 1. Coloca el update en la cola de procesamiento de la aplicación
-        app.update_queue.put(update)
-
-        # 2. Ejecuta el procesamiento de la cola usando el loop asíncrono
-        asyncio.run(app.process_update(update))
-        
-        # Devolver respuesta OK a Telegram
-        return "ok"
-        
-    except Exception as e:
-        # Manejo de excepción único
-        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        return "ok"
-
-
-# Arranque final del servidor web
 if __name__ == "__main__":
-    # Iniciar la aplicación de Telegram en background (necesario para el loop)
-    # y luego iniciar Flask para recibir webhooks.
-    try:
-        # Iniciar el bot en modo webhook sin bloquear. Esto es crucial.
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(app.initialize())
-        loop.run_until_complete(app.start())
-
-        port = int(os.environ.get("PORT", 8080))
-        flask_app.run(host="0.0.0.0", port=port, debug=False)
-
-    except Exception as e:
-        print(f"Error al iniciar el servidor o el bot: {e}", flush=True)
+    app.run_polling()
