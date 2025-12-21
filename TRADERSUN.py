@@ -132,12 +132,19 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
 # ------------------------------
 # Handlers del Bot de Telegram
 # ------------------------------
+
+# Menú inicial con pares
 async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("🚀 Bienvenido a Tradersun Bot. Usa los botones para generar señales.")
+    keyboard = [
+        [InlineKeyboardButton("EUR/USD", callback_data="EURUSD=X|15m")],
+        [InlineKeyboardButton("GBP/USD", callback_data="GBPUSD=X|15m")],
+        [InlineKeyboardButton("USD/JPY", callback_data="USDJPY=X|15m")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("🚀 Selecciona un par para analizar:", reply_markup=reply_markup)
 
-async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("⚡ Selección recibida. (Handler en construcción)")
 
+# Manejo de selección de par/intervalo
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -151,34 +158,52 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     precision = PRECISION_GLOBAL
     
     if modelo is None:
-        await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo de análisis no pudo cargarse al iniciar el bot.")
+        await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo no pudo cargarse.")
         return
 
     _, _, df_hist = entrenar_modelo(par, intervalo) 
     senal = generar_senal(par, intervalo, modelo, precision)
 
     keyboard = [
-        [InlineKeyboardButton("📡 Nueva señal", callback_data="nueva_senal")],
+        [InlineKeyboardButton("📡 Nueva señal", callback_data=f"{par}|{intervalo}")],
         [InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data=f"ver_rendimiento|{par}|{intervalo}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     context.user_data["df_hist"] = df_hist
-
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
-async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("📡 Generando nueva señal... (Handler en construcción)")
 
+# Generar nueva señal
+async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split("|")
+    if len(data) == 2:
+        par, intervalo = data
+        senal = generar_senal(par, intervalo, MODELO_GLOBAL, PRECISION_GLOBAL)
+        await query.edit_message_text(text=f"📡 Nueva señal para {par} en {intervalo}:\n\n{senal}")
+    else:
+        await query.edit_message_text(text="⚠️ No se pudo generar nueva señal.")
+
+
+# Mostrar rendimiento histórico
 async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("📊 Mostrando rendimiento histórico... (Handler en construcción)")
+    query = update.callback_query
+    await query.answer()
+    df_hist = context.user_data.get("df_hist")
+    if df_hist is not None:
+        resumen = f"📊 Rendimiento histórico disponible: {len(df_hist)} velas descargadas."
+        await query.edit_message_text(text=resumen)
+    else:
+        await query.edit_message_text(text="⚠️ No hay datos históricos cargados.")
+
 
 # ------------------------------
 # Configuración del bot (handlers y aplicación)
 # ------------------------------
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", menu_otc))
-app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  
 app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))         
 app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
 app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
