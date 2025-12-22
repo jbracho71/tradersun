@@ -10,7 +10,11 @@ from sklearn.model_selection import train_test_split
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
+<<<<<<< HEAD
 import os from dotenv import load_dotenv # Cargar variables desde .env load_dotenv() # Leer el token desde la variable de entorno TOKEN = os.getenv("TOKEN")  # Reemplaza con tu token real de BotFather
+=======
+TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk"  # Reemplaza con tu token real de BotFather
+>>>>>>> a7e7edd3721ecb31a71f39d6e9f07d77157bea6f
 
 # ------------------------------
 # Entrenamiento del modelo
@@ -294,4 +298,7 @@ def main():
 if __name__ == "__main__":
     main()
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> a7e7edd3721ecb31a71f39d6e9f07d77157bea6f
