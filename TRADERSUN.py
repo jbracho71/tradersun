@@ -4,43 +4,56 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
-import os
-import asyncio 
-import joblib 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-from flask import Flask, request
 
-# Se elimina la importación innecesaria y conflictiva:
-# from asgiref.sync import sync_to_async 
-
-# NOTA: Reemplaza con tu token real de BotFather
-TOKEN = "8246576801:AAEORFpWu_gwXhRq7QznMb1mwnCYeH3-uOk" # Usa tu token real
-
-# ----------------------------------------------------
-# INICIALIZACIÓN GLOBAL DE MODELO (CARGA RÁPIDA)
-# ----------------------------------------------------
-try:
-    MODELO_GLOBAL = joblib.load('tradersun_modelo.pkl')
-    PRECISION_GLOBAL = 85.0 
-    print("Modelo de ML cargado exitosamente.")
-except FileNotFoundError:
-    print("ERROR CRÍTICO: No se encontró 'tradersun_modelo.pkl'. El bot no funcionará.")
-    MODELO_GLOBAL = None
-    PRECISION_GLOBAL = 0.0
+import os from dotenv import load_dotenv # Cargar variables desde .env load_dotenv() # Leer el token desde la variable de entorno TOKEN = os.getenv("TOKEN")  # Reemplaza con tu token real de BotFather
 
 # ------------------------------
-# Función de Entrenamiento (MANTENIMIENTO/DATOS HISTÓRICOS)
+# Entrenamiento del modelo
 # ------------------------------
 def entrenar_modelo(par="EURUSD=X", intervalo="15m", dias="30d"):
     df = yf.download(par, period=dias, interval=intervalo, auto_adjust=True)
-    return None, 0.0, df 
+    if df.empty:
+        return None, 0.0, None
 
+    df.index = df.index.tz_convert("America/Caracas")
+
+    close = df["Close"].squeeze()
+    high = df["High"].squeeze()
+    low = df["Low"].squeeze()
+
+    # Indicadores técnicos
+    df["RSI"] = ta.momentum.RSIIndicator(close).rsi()
+    df["CCI"] = ta.trend.CCIIndicator(high, low, close).cci()
+    df["STOCH"] = ta.momentum.StochasticOscillator(high, low, close).stoch()
+    df["ADX"] = ta.trend.ADXIndicator(high, low, close).adx()
+
+    # 🔎 Calcular ATR y normalizar a índice 0–100
+    atr = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range()
+    df["ATR_Index"] = (atr / atr.max()) * 100
+
+    df = df.dropna()
+    df["target"] = np.where(df["Close"].values > df["Open"].values, 1, 0)
+
+    X = pd.DataFrame(df[["RSI", "CCI", "STOCH", "ADX"]].values,
+                     columns=["RSI", "CCI", "STOCH", "ADX"])
+    y = df["target"]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    modelo = RandomForestClassifier(n_estimators=120, random_state=42)
+    modelo.fit(X_train, y_train)
+
+    y_pred = modelo.predict(X_test)
+    precision = accuracy_score(y_test, y_pred) * 100
+
+    return modelo, precision, df
 # ------------------------------
-# Generación de señal (El cuerpo de esta función se mantiene sin cambios)
+# Generación de señal con análisis gráfico automático + semáforo + checklist
 # ------------------------------
 def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
     try:
@@ -128,36 +141,92 @@ def generar_senal(par: str, intervalo: str, modelo, precision: float) -> str:
 
     except Exception as e:
         return f"❌ Error analizando {par}: {e}"
-        
 # ------------------------------
-# Handlers del Bot de Telegram (se mantienen igual, solo se definen)
+# Rendimiento histórico (gráfico)
 # ------------------------------
-async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+def generar_grafico_rendimiento(df: pd.DataFrame, par: str, intervalo: str) -> BytesIO:
+    df = df.copy()
+    df["target"] = np.where(df["Close"].values > df["Open"].values, 1, 0)
+    df["pred_dummy"] = np.where(df["RSI"] > 50, 1, 0)
+    df["acierto"] = (df["target"] == df["pred_dummy"]).astype(int)
+    df["rolling_acc"] = df["acierto"].rolling(50).mean() * 100
 
-async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+    plt.figure(figsize=(8, 4))
+    plt.plot(df.index, df["rolling_acc"], label="Precisión rolling (RSI>50 ref.)", color="#2b8a3e")
+    plt.axhline(50, color="#999", linestyle="--", linewidth=1)
+    plt.axhline(70, color="red", linestyle="--", linewidth=1, label="RSI 70 (sobrecompra)")
+    plt.axhline(30, color="blue", linestyle="--", linewidth=1, label="RSI 30 (sobreventa)")
+    plt.title(f"Rendimiento histórico - {par} ({intervalo})")
+    plt.ylabel("Precisión (%)")
+    plt.xlabel("Tiempo")
+    plt.legend()
+    plt.tight_layout()
 
+    buf = BytesIO()
+    plt.savefig(buf, format="png")
+    plt.close()
+    buf.seek(0)
+    return buf
+# ------------------------------
+# Menú de pares con banderas
+# ------------------------------
+async def menu_otc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🇺🇸/🇯🇵 USD/JPY OTC", callback_data="USDJPY=X"),
+         InlineKeyboardButton("🇬🇧/🇺🇸 GBP/USD OTC", callback_data="GBPUSD=X")],
+        [InlineKeyboardButton("🇪🇺/🇺🇸 EUR/USD OTC", callback_data="EURUSD=X"),
+         InlineKeyboardButton("🇦🇺/🇨🇭 AUD/CHF OTC", callback_data="AUDCHF=X")],
+        [InlineKeyboardButton("🇺🇸/🇨🇦 USD/CAD OTC", callback_data="USDCAD=X"),
+         InlineKeyboardButton("🇬🇧/🇨🇦 GBP/CAD OTC", callback_data="GBPCAD=X")],
+        [InlineKeyboardButton("🇦🇺/🇪🇺 EUR/AUD OTC", callback_data="EURAUD=X"),
+         InlineKeyboardButton("🇪🇺/🇨🇭 EUR/CHF OTC", callback_data="EURCHF=X")],
+        [InlineKeyboardButton("🇳🇿/🇺🇸 NZD/USD OTC", callback_data="NZDUSD=X"),
+         InlineKeyboardButton("🇬🇧/🇯🇵 GBP/JPY OTC", callback_data="GBPJPY=X")],
+        [InlineKeyboardButton("🇨🇭/🇬🇧 GBP/CHF OTC", callback_data="GBPCHF=X"),
+         InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data="ver_rendimiento")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.message:
+        await update.message.reply_text("📈 Selecciona un par OTC:", reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.reply_text("📈 Selecciona un par OTC:", reply_markup=reply_markup)
+
+# ------------------------------
+# Selección de par → intervalos
+# ------------------------------
+async def manejar_seleccion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    par = query.data
+
+    keyboard = [
+        [InlineKeyboardButton("1m", callback_data=f"{par}|1m")],
+        [InlineKeyboardButton("5m", callback_data=f"{par}|5m")],
+        [InlineKeyboardButton("15m", callback_data=f"{par}|15m")],
+        [InlineKeyboardButton("1h", callback_data=f"{par}|1h")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=f"⏱ Selecciona intervalo para {par}:", reply_markup=reply_markup)
+# ------------------------------
+# Selección de intervalo → señal
+# ------------------------------
 async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     data = query.data.split("|")
-    par, intervalo = data
-
-    await query.edit_message_text(text=f"🔍 Analizando {par} en {intervalo}...")
-
-    modelo = MODELO_GLOBAL 
-    precision = PRECISION_GLOBAL
-    
-    if modelo is None:
-        await context.bot.send_message(chat_id=query.message.chat_id, text="❌ Error: El modelo de análisis no pudo cargarse al iniciar el bot. Contacte a soporte.")
+    if len(data) != 2:
+        await query.edit_message_text(text=f"⚠️ Error: formato inesperado en {query.data}")
         return
 
-    _, _, df_hist = entrenar_modelo(par, intervalo) 
-    
+    par, intervalo = data
+    await query.edit_message_text(text=f"🔍 Analizando {par} en {intervalo}...")
+
+    modelo, precision, df_hist = entrenar_modelo(par, intervalo)
     senal = generar_senal(par, intervalo, modelo, precision)
 
+    # Teclado con nueva señal y rendimiento histórico
     keyboard = [
         [InlineKeyboardButton("📡 Nueva señal", callback_data="nueva_senal")],
         [InlineKeyboardButton("📊 Ver rendimiento histórico", callback_data=f"ver_rendimiento|{par}|{intervalo}")]
@@ -168,68 +237,61 @@ async def manejar_intervalo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(chat_id=query.message.chat_id, text=senal, reply_markup=reply_markup)
 
-async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
-
-async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    pass 
+# ------------------------------
+# Nueva señal → volver al menú
+# ------------------------------
+async def manejar_nueva_senal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await menu_otc(update, context)
 
 # ------------------------------
-# Configuración del bot (handlers y aplicación)
+# Ver rendimiento histórico
 # ------------------------------
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", menu_otc))
-app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern="^(?!.*\\|).*"))  
-app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=".*\\|.*"))         
-app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern="nueva_senal"))
-app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern="ver_rendimiento.*"))
+async def manejar_rendimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    parts = query.data.split("|")
+    if parts[0] == "ver_rendimiento" and len(parts) == 3:
+        _, par, intervalo = parts
+        _, _, df_hist = entrenar_modelo(par, intervalo)
+    else:
+        df_hist = context.user_data.get("df_hist", None)
+        par = "PAR DESCONOCIDO"
+        intervalo = "INTERVALO"
+
+    if df_hist is None or df_hist.empty:
+        await query.edit_message_text("⚠️ No hay datos históricos disponibles para generar el gráfico.")
+        return
+
+    buf = generar_grafico_rendimiento(df_hist, par, intervalo)
+
+    await query.message.reply_photo(
+        photo=InputFile(buf, filename="rendimiento.png"),
+        caption=f"📊 Rendimiento histórico de {par} ({intervalo})"
+    )
 
 # ------------------------------
-# Servidor Flask para Cloud Run (WEBHOOK)
+# Configuración del bot (main)
 # ------------------------------
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-flask_app = Flask(__name__)
+    # Comando inicial /start
+    app.add_handler(CommandHandler("start", menu_otc))
+    # Selección de par (ej: EURUSD=X)
+    app.add_handler(CallbackQueryHandler(manejar_seleccion, pattern=r".*=X$"))
+    # Selección de intervalo (ej: EURUSD=X|15m)
+    app.add_handler(CallbackQueryHandler(manejar_intervalo, pattern=r"^[A-Z]+.*\|[0-9]+[mh]$"))
+    # Volver a menú
+    app.add_handler(CallbackQueryHandler(manejar_nueva_senal, pattern=r"nueva_senal"))
+    # Ver rendimiento histórico (ej: ver_rendimiento|EURUSD=X|15m)
+    app.add_handler(CallbackQueryHandler(manejar_rendimiento, pattern=r"^ver_rendimiento.*"))
 
-@flask_app.route('/')
-def home():
-    return "Tradersun Bot activo 🚀", 200
+    app.run_polling()
 
-@flask_app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        json_data = request.get_json(force=True)
-        update = Update.de_json(json_data, app.bot)
-        
-        # 🛑 CORRECCIÓN CRÍTICA FINAL: Inyectar la actualización a la cola de PTB 
-        # y luego correr el proceso del bot en el loop asíncrono.
-        
-        # 1. Coloca el update en la cola de procesamiento de la aplicación
-        app.update_queue.put(update)
-
-        # 2. Ejecuta el procesamiento de la cola usando el loop asíncrono
-        asyncio.run(app.process_update(update))
-        
-        # Devolver respuesta OK a Telegram
-        return "ok"
-        
-    except Exception as e:
-        # Manejo de excepción único
-        print(f"ERROR: Fallo al procesar el update: {e}", flush=True) 
-        return "ok"
-
-
-# Arranque final del servidor web
 if __name__ == "__main__":
-    # Iniciar la aplicación de Telegram en background (necesario para el loop)
-    # y luego iniciar Flask para recibir webhooks.
-    try:
-        # Iniciar el bot en modo webhook sin bloquear. Esto es crucial.
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(app.initialize())
-        loop.run_until_complete(app.start())
+    main()
 
-        port = int(os.environ.get("PORT", 8080))
-        flask_app.run(host="0.0.0.0", port=port, debug=False)
 
-    except Exception as e:
-        print(f"Error al iniciar el servidor o el bot: {e}", flush=True)
